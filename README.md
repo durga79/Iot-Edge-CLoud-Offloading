@@ -52,49 +52,95 @@ The implementation measures:
 
 ## Usage
 
-### Clone the repository
+### Linux/macOS
 
-#### Linux/macOS
-```bash
-git clone https://github.com/yourusername/IoT-Edge-Cloud-Offloading.git
-cd IoT-Edge-Cloud-Offloading
-```
+1. Clone the repository
+   ```bash
+   git clone https://github.com/your-repo/IoT-Edge-Cloud-Offloading.git
+   cd IoT-Edge-Cloud-Offloading
+   ```
 
-#### Windows
-```batch
-git clone https://github.com/yourusername/IoT-Edge-Cloud-Offloading.git
-cd IoT-Edge-Cloud-Offloading
-```
+2. Compile the project
+   ```bash
+   mvn clean compile
+   ```
 
-### Compile the project
+3. Run the simulation with the custom implementation
+   ```bash
+   mvn exec:java
+   ```
 
-#### Linux/macOS
-```bash
-mvn clean compile
-```
+4. Run the simulation with iFogSim integration (requires iFogSim JAR)
+   ```bash
+   mvn exec:java -Dexec.args="--ifogsim"
+   ```
 
-#### Windows
-```batch
-mvn clean compile
-```
+### Windows
 
-### Run the simulation
+#### Option 1: Using the run_simulation.bat Script for iFogSim Simulation
 
-#### Linux/macOS
-```bash
-mvn exec:java -Dexec.mainClass="org.hyboff.simulation.TestSimulation"
-```
+1. Simply double-click the `run_simulation.bat` file in the project directory
+2. The script will automatically run the simulation with the iFogSim integration
+3. All compilation and execution steps are handled automatically
 
-#### Windows
-```batch
-mvn exec:java -Dexec.mainClass="org.hyboff.simulation.TestSimulation"
-```
+#### Option 2: Using Command Line
 
-### Alternative method for Windows (if exec:java doesn't work)
-```batch
-mvn clean package
-java -jar target/IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar
-```
+1. Clone the repository
+   ```cmd
+   git clone https://github.com/your-repo/IoT-Edge-Cloud-Offloading.git
+   cd IoT-Edge-Cloud-Offloading
+   ```
+
+2. Compile the project
+   ```cmd
+   mvn clean compile
+   ```
+
+3. Run the simulation with the custom implementation
+   ```cmd
+   mvn exec:java -Dexec.mainClass="org.hyboff.simulation.RunSimulation"
+   ```
+
+4. Run the simulation with the simulated iFogSim integration
+   ```cmd
+   mvn exec:java -Dexec.args="--ifogsim"
+   ```
+   
+   This will use our built-in simulated iFogSim implementation that doesn't require downloading the external iFogSim JAR file.
+
+5. Alternatively, if Maven exec plugin fails, you can run the packaged JAR:
+   ```cmd
+   mvn clean package
+   java -jar target/IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar
+   ```
+   
+   To run with iFogSim:
+   ```cmd
+   java -jar target/IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar --ifogsim
+   ```
+
+### iFogSim Integration
+
+This project includes two options for iFogSim integration:
+
+#### Option 1: Simulated iFogSim (Recommended)
+The project now includes a built-in simulated iFogSim implementation that doesn't require downloading the actual iFogSim JAR file. This implementation mimics iFogSim concepts using the existing project classes.
+
+To use the simulated iFogSim:
+1. Simply run the simulation with the `--ifogsim` flag as shown above
+2. The simulation will automatically use the simulated iFogSim implementation
+3. Results can be compared with the standard simulation to validate the integration concept
+
+#### Option 2: Real iFogSim Integration (Optional)
+If you want to use the actual iFogSim integration (requires modifications to the project):
+
+1. Download iFogSim from [GitHub](https://github.com/Cloudslab/iFogSim)
+2. Build iFogSim using the provided instructions
+3. Copy the generated JAR file to the `lib` directory in this project
+4. Rename it to `ifogsim.jar`
+5. Restore the original iFogSim integration classes from backup
+6. Re-add the system-scoped dependency in `pom.xml`
+7. Run the simulation with the `--ifogsim` flag
 
 ### Customizing the simulation
 You can modify the simulation parameters in the `TestSimulation.java` file:

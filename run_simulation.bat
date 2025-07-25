@@ -1,7 +1,9 @@
 @echo off
 echo ===================================================
-echo IoT Edge-Cloud Offloading Simulation Runner
+echo IoT Edge-Cloud Offloading Simulation - iFogSim Mode
 echo ===================================================
+echo.
+echo Running simulation with simulated iFogSim integration
 echo.
 
 :: Check if Java is installed
@@ -39,8 +41,9 @@ echo Compilation successful.
 echo.
 
 :: Try running with Maven exec plugin
-echo Running simulation using Maven exec plugin...
-call mvn exec:java -Dexec.mainClass="org.hyboff.simulation.TestSimulation"
+echo Running iFogSim simulation using Maven exec plugin...
+call mvn exec:java -Dexec.mainClass="org.hyboff.simulation.RunSimulation" -Dexec.args="--ifogsim"
+
 if %errorlevel% neq 0 (
     echo WARNING: Maven exec failed. Will attempt to run using the JAR file.
     goto BuildJar
@@ -62,15 +65,15 @@ echo.
 
 :RunJar
 :: Run the JAR file
-echo Running simulation from JAR file...
+echo Running iFogSim simulation from JAR file...
 if exist "target\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" (
-    java -jar "target\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar"
+    java -jar "target\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" --ifogsim
 ) else if exist "IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" (
-    java -jar "IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar"
+    java -jar "IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" --ifogsim
 ) else if exist "D:\projects\Iot-Edge-CLoud-Offloading\target\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" (
-    java -jar "D:\projects\Iot-Edge-CLoud-Offloading\target\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar"
+    java -jar "D:\projects\Iot-Edge-CLoud-Offloading\target\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" --ifogsim
 ) else if exist "D:\projects\Iot-Edge-CLoud-Offloading\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" (
-    java -jar "D:\projects\Iot-Edge-CLoud-Offloading\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar"
+    java -jar "D:\projects\Iot-Edge-CLoud-Offloading\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar" --ifogsim
 ) else (
     echo ERROR: Could not find the JAR file.
     echo Please make sure you have the JAR file in the current directory or in the target directory.
@@ -84,6 +87,6 @@ if exist "target\IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.ja
 :End
 echo.
 echo ===================================================
-echo Simulation completed!
+echo iFogSim simulation completed!
 echo ===================================================
 pause
