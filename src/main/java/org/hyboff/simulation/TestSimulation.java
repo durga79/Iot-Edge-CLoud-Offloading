@@ -1,11 +1,12 @@
 package org.hyboff.simulation;
 
+import org.hyboff.simulation.model.*;
 import org.hyboff.simulation.util.Log;
 import org.hyboff.simulation.util.SimulationClock;
+import org.hyboff.simulation.network.WirelessNetworkModel;
+import org.hyboff.simulation.security.SecurityManager;
+import org.hyboff.simulation.analytics.DataAnalytics;
 import org.hyboff.simulation.clustering.KMeansClustering;
-import org.hyboff.simulation.model.FogDevice;
-import org.hyboff.simulation.model.IoTDevice;
-import org.hyboff.simulation.model.Task;
 import org.hyboff.simulation.offloading.DynamicOffloadingPolicy;
 import org.hyboff.simulation.offloading.HybOffController;
 import org.hyboff.simulation.offloading.HybridOffloadingPolicy;
@@ -58,7 +59,8 @@ public class TestSimulation {
         Random random = new Random(42); // Fixed seed for reproducibility
         
         for (int i = 0; i < count; i++) {
-            int mips = 1000 + random.nextInt(2000);
+            // Increase MIPS capacity to handle larger tasks (min 3000, max 7000)
+            int mips = 3000 + random.nextInt(4000);
             int ram = 1024 + random.nextInt(3072);
             int storage = 10000 + random.nextInt(40000);
             int bw = 100 + random.nextInt(900);
@@ -159,7 +161,8 @@ public class TestSimulation {
             for (IoTDevice iot : iotDevices) {
                 // 20% chance to generate a task per time step
                 if (random.nextDouble() < 0.2) {
-                    int taskSize = 500 + random.nextInt(2500);
+                    // Generate tasks with sizes that fog devices can handle (300-2000 MIPS)
+                    int taskSize = 300 + random.nextInt(1700);
                     int deadline = 5 + random.nextInt(20);
                     boolean isUrgent = random.nextDouble() < 0.2;
                     
@@ -172,7 +175,7 @@ public class TestSimulation {
             
             // Update fog devices
             for (FogDevice fog : fogDevices) {
-                fog.updateTaskExecution();
+                fog.update();
             }
             
             // Update controller status every 10 time steps
@@ -185,65 +188,160 @@ public class TestSimulation {
         printFinalMetrics(fogDevices, policyName);
     }
     
-    private static void printFinalMetrics(List<FogDevice> fogDevices, String policyName) {
-        DecimalFormat df = new DecimalFormat("#.##");
+    /**
+     * Calculate load balancing metric based on task distribution
+     * @param fogDevices List of fog devices
+     * @return Load balancing factor (0-1)
+     */
+    private static double calculateLoadBalancing(List<FogDevice> fogDevices) {
+        if (fogDevices.isEmpty()) {
+            return 1.0; // Perfect balance if no devices
+        }
         
-        // Force completion of any remaining tasks for accurate metrics
+        // Calculate utilization for each device
+        double[] utilizations = new double[fogDevices.size()];
+        int i = 0;
+        double maxUtil = 0;
+        double minUtil = Double.MAX_VALUE;
+        
+        for (FogDevice fog : fogDevices) {
+            double util = fog.getMonitor().getCpuUtilization();
+            utilizations[i++] = util;
+            maxUtil = Math.max(maxUtil, util);
+            minUtil = Math.min(minUtil, util);
+        }
+        
+        // Calculate load balancing as 1 - (max-min)/max
+        // This gives 1.0 for perfect balance and approaches 0 for poor balance
+        return (maxUtil > 0) ? 1.0 - ((maxUtil - minUtil) / maxUtil) : 1.0;
+    }
+    
+    private static void printFinalMetrics(List<FogDevice> fogDevices, String policyName) {
+        System.out.println("\n====== SIMULATION RESULTS ======");
+        
+        // Force completion of all tasks before calculating metrics
         for (FogDevice fog : fogDevices) {
             fog.completeAllTasks();
         }
         
         // Calculate resource utilization
-        double totalUtilized = 0;
-        double totalAvailable = 0;
-        for (FogDevice fog : fogDevices) {
-            totalUtilized += fog.getUtilizedMips();
-            totalAvailable += fog.getTotalMips();
-        }
-        double utilization = totalAvailable > 0 ? totalUtilized / totalAvailable : 0;
-        
-        // Calculate load balancing metric (standard deviation of utilization)
-        double mean = 0;
-        for (FogDevice fog : fogDevices) {
-            mean += fog.getUtilizationRatio();
-        }
-        mean = fogDevices.size() > 0 ? mean / fogDevices.size() : 0;
-        
-        double sumSquaredDiff = 0;
-        for (FogDevice fog : fogDevices) {
-            double util = fog.getUtilizationRatio();
-            sumSquaredDiff += Math.pow(util - mean, 2);
-        }
-        double stdDev = fogDevices.size() > 0 ? Math.sqrt(sumSquaredDiff / fogDevices.size()) : 0;
-        double loadBalancing = 1 - stdDev;
-        
-        // Calculate system performance
-        int completedTasks = 0;
         int totalTasks = 0;
+        int completedTasks = 0;
         double totalResponseTime = 0;
+        
+        // Calculate resource utilization
+        double totalMips = 0;
+        double usedMips = 0;
+        
+        // Collect task data from all devices
         for (FogDevice fog : fogDevices) {
-            completedTasks += fog.getCompletedTasks();
-            totalTasks += fog.getTotalReceivedTasks();
-            totalResponseTime += fog.getTotalResponseTime();
+            HybOffScheduler scheduler = fog.getScheduler();
+            List<Task> deviceTasks = scheduler.getAllTasks();
+            List<Task> deviceCompletedTasks = scheduler.getCompletedTasks();
+            
+            totalTasks += deviceTasks.size();
+            completedTasks += deviceCompletedTasks.size();
+            totalResponseTime += scheduler.getTotalResponseTime();
+            
+            totalMips += fog.getTotalMips();
+            usedMips += fog.getUsedMips();
         }
         
-        double completionRate = totalTasks > 0 ? completedTasks / (double) totalTasks : 1.0;
-        double avgResponseTime = completedTasks > 0 ? totalResponseTime / completedTasks : 0;
-        double performance = completionRate * (1.0 / (1 + avgResponseTime / 1000)) * 100;
+        // Print key metrics requested in the question paper
+        System.out.println("===== KEY PERFORMANCE METRICS =====\n");
         
-        // Print metrics
-        Log.printLine("\n==== Results for " + policyName + " ====");
-        Log.printLine("Resource Utilization: " + df.format(utilization * 100) + "%");
-        Log.printLine("Load Balancing: " + df.format(loadBalancing * 100) + "%");
-        Log.printLine("System Performance: " + df.format(performance));
-        // Fix task completion display: if completedTasks > 0 but totalTasks = 0, use completedTasks as total
-        if (completedTasks > 0 && totalTasks == 0) {
-            totalTasks = completedTasks;
+        // 1. Task Completion Rate
+        double taskCompletionRate = (totalTasks > 0) ? ((double)completedTasks / totalTasks) * 100 : 0;
+        System.out.println("1. Task Completion Rate: " + completedTasks + "/" + totalTasks + 
+                         " (" + String.format("%.2f", taskCompletionRate) + "%)");
+        
+        // 2. Resource Utilization
+        double resourceUtilization = (totalMips > 0) ? ((double)usedMips / totalMips) * 100 : 0;
+        System.out.println("2. Resource Utilization: " + String.format("%.2f", resourceUtilization) + "%");
+        
+        // 3. Load Balancing
+        double loadBalancing = calculateLoadBalancing(fogDevices) * 100;
+        System.out.println("3. Load Balancing: " + String.format("%.2f", loadBalancing) + "%");
+        
+        // 4. Average Response Time
+        double avgResponseTime = (completedTasks > 0) ? (totalResponseTime / completedTasks) : 0;
+        System.out.println("4. Average Response Time: " + String.format("%.2f", avgResponseTime) + " ms");
+        
+        // 5. Energy Efficiency
+        double totalEnergy = 0;
+        for (FogDevice fog : fogDevices) {
+            double energy = fog.getEnergyModel().getTotalEnergyConsumed();
+            totalEnergy += energy;
+            
+            // Print individual device energy stats
+            System.out.println(fog.getId() + " energy: " + String.format("%.2f", energy) + " J");
+            
+            // Calculate energy efficiency (tasks per joule)
+            int deviceCompletedTasks = fog.getScheduler().getCompletedTasks().size();
+            double energyEfficiency = energy > 0 ? deviceCompletedTasks / energy : 0;
+            // Energy efficiency is calculated per task below
         }
-        Log.printLine("Completed Tasks: " + completedTasks + " / " + totalTasks + 
-                     " (" + (totalTasks > 0 ? df.format(completedTasks * 100.0 / totalTasks) : "100.00") + "%)");
-        Log.printLine("Average Response Time: " + df.format(avgResponseTime) + " ms");
-        Log.printLine("===================================");
+        
+        // Average energy metrics
+        double avgEnergyPerDevice = totalEnergy / fogDevices.size();
+        double energyPerTask = completedTasks > 0 ? totalEnergy / completedTasks : 0;
+        double avgEnergyEfficiency = totalEnergy > 0 ? completedTasks / totalEnergy : 0;
+        
+        System.out.println("Total Energy Consumed: " + String.format("%.2f", totalEnergy) + " J");
+        System.out.println("Average Energy per Device: " + String.format("%.2f", avgEnergyPerDevice) + " J");
+        System.out.println("Energy per Task: " + String.format("%.2f", energyPerTask) + " J");
+        System.out.println("Average Energy Efficiency: " + String.format("%.4f", avgEnergyEfficiency) + " tasks/J");
+        
+        // Network metrics
+        System.out.println("\n====== NETWORK METRICS ======");
+        int offloadedTasks = 0;
+        for (FogDevice fog : fogDevices) {
+            for (Task task : fog.getScheduler().getCompletedTasks()) {
+                if (task.getSourceId() != null && !task.getSourceId().equals(fog.getId())) {
+                    offloadedTasks++;
+                }
+            }
+        }
+        
+        double offloadingRate = totalTasks > 0 ? offloadedTasks / (double) totalTasks : 0;
+        System.out.println("Offloaded Tasks: " + offloadedTasks + "/" + totalTasks + 
+                         " (" + String.format("%.2f", offloadingRate * 100) + "%)");
+        
+        // Security metrics if enabled
+        boolean securityEnabled = false;
+        for (FogDevice fog : fogDevices) {
+            if (fog.isSecurityEnabled()) {
+                securityEnabled = true;
+                break;
+            }
+        }
+        
+        if (securityEnabled) {
+            System.out.println("\n====== SECURITY METRICS ======");
+            System.out.println("Security Enabled: Yes");
+            
+            // Count devices by security level
+            int[] securityLevelCount = new int[4]; // NONE, LOW, MEDIUM, HIGH
+            for (FogDevice fog : fogDevices) {
+                if (fog.isSecurityEnabled()) {
+                    SecurityManager.SecurityLevel level = fog.getSecurityManager().getSecurityLevel();
+                    securityLevelCount[level.ordinal()]++;
+                }
+            }
+            
+            System.out.println("Security Level Distribution:");
+            System.out.println("  NONE: " + securityLevelCount[0] + " devices");
+            System.out.println("  LOW: " + securityLevelCount[1] + " devices");
+            System.out.println("  MEDIUM: " + securityLevelCount[2] + " devices");
+            System.out.println("  HIGH: " + securityLevelCount[3] + " devices");
+            
+            // Estimate security overhead
+            double securityOverhead = 0.05 * avgResponseTime; // Estimate 5% overhead
+            System.out.println("Estimated Security Overhead: " + String.format("%.2f", securityOverhead) + " ms/task");
+        } else {
+            System.out.println("\n====== SECURITY METRICS ======");
+            System.out.println("Security Enabled: No");
+        }
     }
     
     private static void resetDevices(List<FogDevice> fogDevices) {

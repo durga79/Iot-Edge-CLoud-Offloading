@@ -67,10 +67,40 @@ public class HybOffScheduler {
         // Check if there is enough space in the queue
         int maxQueueSize = fogDevice.getMaxQueueSize();
         if (taskQueue.size() >= maxQueueSize) {
+            // Disabled verbose debug logging
+            // System.out.println("DEBUG: " + fogDevice.getId() + " queue full. Queue size: " + taskQueue.size() + ", Max size: " + maxQueueSize);
             return false;
         }
         
-        return true;
+        // Check if there are enough resources available to eventually process the task
+        // We only need to ensure the device has the total capacity to handle the task,
+        // not that it has immediate resources available (tasks can be queued)
+        int availableMips = fogDevice.getAvailableMips();
+        int totalMips = fogDevice.getTotalMips();
+        int totalExecutingTaskSize = 0;
+        
+        for (Task executingTask : executingTasks) {
+            totalExecutingTaskSize += executingTask.getSize();
+        }
+        
+        // Calculate total queued task size for debugging
+        int totalQueuedTaskSize = 0;
+        for (Task queuedTask : taskQueue) {
+            totalQueuedTaskSize += queuedTask.getSize();
+        }
+        
+        // More lenient check: Only verify that the task size is within the device's total capacity
+        // This allows tasks to be queued even if resources aren't immediately available
+        boolean hasEnoughResources = task.getSize() <= totalMips;
+        
+        // Disabled verbose debug logging
+        // System.out.println("DEBUG: " + fogDevice.getId() + " cannot accept task " + task.getId() + 
+        //                 ". Available MIPS: " + availableMips + 
+        //                 ", Executing tasks MIPS: " + totalExecutingTaskSize + 
+        //                 ", Queued tasks MIPS: " + totalQueuedTaskSize + 
+        //                 ", New task size: " + task.getSize());
+        
+        return hasEnoughResources;
     }
     
     /**
@@ -80,10 +110,15 @@ public class HybOffScheduler {
         // Process completed tasks first
         List<Task> newlyCompleted = new ArrayList<>();
         for (Task task : executingTasks) {
-            // Use the total MIPS capacity for task progress update
-            // This is a simplification, assuming one task uses all available MIPS
-            // A more sophisticated model would divide resources among tasks
-            task.updateProgress(fogDevice.getTotalMips());
+            // Calculate a fair share of MIPS for each executing task
+            // This ensures tasks make progress even when multiple tasks are executing
+            int availableMipsPerTask = Math.max(1, fogDevice.getAvailableMips() / Math.max(1, executingTasks.size()));
+            
+            // Add some guaranteed progress to ensure tasks complete
+            int progressMips = Math.max(100, availableMipsPerTask);
+            
+            // Update task progress with allocated MIPS
+            task.updateProgress(progressMips);
             
             if (task.isCompleted()) {
                 newlyCompleted.add(task);
@@ -95,10 +130,9 @@ public class HybOffScheduler {
                 // Release resources
                 fogDevice.releaseResource(task.getSize());
                 
-                if (fogDevice.isLogEnabled()) {
-                    Log.printLine(fogDevice.getId() + " completed task " + task.getId() + 
-                                 " (response time: " + String.format("%.2f", responseTime) + " ms)");
-                }
+                // Disabled verbose task completion messages
+                // System.out.println(fogDevice.getId() + " completed task " + task.getId() + 
+                //              " (response time: " + String.format("%.2f", responseTime) + " ms)");
             }
         }
         
@@ -133,9 +167,10 @@ public class HybOffScheduler {
                 availableMips -= nextTask.getSize();
                 fogDevice.allocateResource(nextTask.getSize());
                 
-                if (fogDevice.isLogEnabled()) {
-                    Log.printLine(fogDevice.getId() + " started executing task " + nextTask.getId());
-                }
+                // Disabled verbose logging
+                // if (fogDevice.isLogEnabled()) {
+                //     Log.printLine(fogDevice.getId() + " started executing task " + nextTask.getId());
+                // }
             } else {
                 break;  // Not enough resources for next task
             }
@@ -197,6 +232,26 @@ public class HybOffScheduler {
      */
     public int getCompletedTaskCount() {
         return completedTasks.size();
+    }
+    
+    /**
+     * Get the list of completed tasks
+     */
+    public List<Task> getCompletedTasks() {
+        return new ArrayList<>(completedTasks);
+    }
+    
+    /**
+     * Add a task to the completed tasks list if it's not already there
+     * @param task The task to add to completed tasks
+     */
+    public void addToCompletedTasks(Task task) {
+        if (!completedTasks.contains(task)) {
+            completedTasks.add(task);
+            // Update metrics
+            totalExecutedTasks++;
+            totalResponseTime += task.getResponseTime();
+        }
     }
     
     /**

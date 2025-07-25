@@ -138,7 +138,10 @@ public class HybridOffloadingPolicy implements OffloadingPolicy {
             }
         }
         
-        if (candidates.isEmpty()) {
+        // If no suitable device found among other devices, try the source device itself as fallback
+        if (candidates.isEmpty() && source.hasResourcesToProcess(task)) {
+            return source;
+        } else if (candidates.isEmpty()) {
             return null;
         }
         
@@ -152,7 +155,7 @@ public class HybridOffloadingPolicy implements OffloadingPolicy {
             double distanceFactor = calculateDistance(source, candidate) / 1000.0; // Normalize distance
             
             // Give more weight to load for urgent tasks, more weight to distance for regular tasks
-            double weightLoad = task.isUrgent() ? 0.3 : 0.7;
+            double weightLoad = task.isUrgent() ? 0.7 : 0.3;
             double weightDistance = 1.0 - weightLoad;
             
             double score = (weightLoad * loadFactor) + (weightDistance * distanceFactor);

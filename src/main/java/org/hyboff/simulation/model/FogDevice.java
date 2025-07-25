@@ -5,6 +5,10 @@ import java.util.List;
 import java.util.Queue;
 import java.util.LinkedList;
 import org.hyboff.simulation.util.Log;
+import org.hyboff.simulation.security.SecurityManager;
+import org.hyboff.simulation.network.WirelessNetworkModel;
+import org.hyboff.simulation.energy.EnergyModel;
+import org.hyboff.simulation.analytics.DataAnalytics;
 
 /**
  * Represents a Fog Device (Edge server) in the simulation.
@@ -36,6 +40,16 @@ public class FogDevice {
     private HybOffMonitor monitor;
     private HybOffCommunicator communicator;
     private HybOffScheduler scheduler;
+    
+    // Energy model
+    private EnergyModel energyModel;
+    
+    // Network model
+    private WirelessNetworkModel networkModel;
+    
+    // Security features
+    private SecurityManager securityManager;
+    private boolean securityEnabled;
     
     /**
      * Constructor for FogDevice
@@ -73,6 +87,26 @@ public class FogDevice {
         this.monitor = new HybOffMonitor(this);
         this.communicator = new HybOffCommunicator(this);
         this.scheduler = new HybOffScheduler(this);
+        
+        // Initialize energy model (default values for fog device)
+        double batteryCapacity = 10000.0;  // 10,000 Joules battery capacity
+        boolean batteryEnabled = true;     // Enable battery constraints
+        this.energyModel = new EnergyModel(id, batteryCapacity, batteryEnabled);
+        
+        // Set power consumption for different states
+        energyModel.setPowerConsumption(EnergyModel.State.IDLE, 10.0);       // 10 watts when idle
+        energyModel.setPowerConsumption(EnergyModel.State.PROCESSING, 50.0); // 50 watts when processing
+        energyModel.setPowerConsumption(EnergyModel.State.TRANSMITTING, 5.0); // 5 watts when transmitting
+        energyModel.setPowerConsumption(EnergyModel.State.RECEIVING, 2.0);   // 2 watts when receiving
+        
+        // Initialize network model (default to WiFi)
+        this.networkModel = new WirelessNetworkModel(WirelessNetworkModel.Protocol.WIFI);
+        
+        // Initialize security (default to basic security)
+        this.securityManager = new SecurityManager(SecurityManager.AuthType.BASIC, 
+                                                 SecurityManager.SecurityLevel.LOW);
+        this.securityEnabled = true;
+        this.securityManager.authenticateDevice(this.id); // Self-authenticate
     }
     
     /**
@@ -131,31 +165,108 @@ public class FogDevice {
      * Returns true if the task was accepted, false otherwise
      */
     public boolean receiveTask(Task task) {
-        return scheduler.addTask(task);
-    }
-    
-    /**
-     * Process a task on this fog device
-     */
-    public void processTask(Task task) {
-        // This method is now delegated to the scheduler
-        if (logEnabled) {
-            Log.printLine(id + " processing task " + task.getId());
+        // Disabled verbose debug logging
+        // System.out.println("DEBUG: " + id + " receiving task " + task.getId() + " of size " + task.getSize() + " MIPS");
+        // System.out.println("DEBUG: " + id + " has " + availableMips + " available MIPS before processing");
+        
+        // Check if this is a security-enabled device
+        if (securityEnabled) {
+            // Authenticate the source device
+            boolean authenticated = securityManager.authenticate(task.getSourceId(), task.getSourceId());
+            if (!authenticated) {
+                // Disabled verbose debug logging
+                // System.out.println("DEBUG: " + id + " authentication failed for task " + task.getId());
+                if (logEnabled) {
+                    Log.printLine(id + ": Authentication failed for task from " + task.getSourceId());
+                }
+                return false;
+            }
+            
+            // Add security overhead (time delay) based on security level
+            double securityOverhead = securityManager.calculateSecurityOverhead(task.getSize());
+            task.addResponseTime(securityOverhead);
         }
+        
+        // Simulate network reception
+        if (networkModel != null) {
+            // Assume a default distance if not specified
+            double distance = 50.0; // meters
+            
+            // Simulate packet transmission
+            WirelessNetworkModel.TransmissionResult result = 
+                networkModel.simulateTransmission(task.getSize(), distance);
+            
+            if (!result.isSuccess()) {
+                // Disabled verbose debug logging
+                // System.out.println("DEBUG: " + id + " network transmission failed for task " + task.getId() + 
+                //               " - Reason: " + result.getMessage());
+                if (logEnabled) {
+                    Log.printLine(id + ": Network transmission failed for task " + task.getId());
+                }
+                return false;
+            }
+            
+            // Add network latency to response time
+            task.addResponseTime(result.getLatency());
+            // Disabled verbose network logging
+            // System.out.println("NETWORK: Task " + task.getId() + " transmission successful with latency " + 
+            //                  String.format("%.2f", result.getLatency()) + " ms");
+            
+            // Consume energy for receiving data
+            energyModel.consumeEnergy(EnergyModel.State.RECEIVING, result.getEnergyConsumed());
+        }
+        
+        // Set this device as the source fog for the task
+        task.setSourceFogId(id);
+        
+        // Increment received task counter
+        totalReceivedTasks++;
+        
+        // Try to add the task to the scheduler
+        boolean taskAccepted = scheduler.addTask(task);
+        // Disabled verbose debug logging
+        // if (!taskAccepted) {
+        //     System.out.println("DEBUG: " + id + " scheduler rejected task " + task.getId());
+        // } else {
+        //     System.out.println("DEBUG: " + id + " accepted task " + task.getId());
+        // }
+        return taskAccepted;
     }
     
     /**
-     * Update task execution status
+     * Process tasks in scheduler
      */
-    public void updateTaskExecution() {
+    public void update() {
+        // Process tasks in scheduler
         scheduler.updateTaskExecution();
+        
+        // Update monitor
+        monitor.update();
+        
+        // Update energy consumption
+        // Calculate utilization ratio (0-1)
+        double utilizationRatio = monitor.getCpuUtilization();
+        
+        // Consume energy based on utilization
+        double timeStep = 1.0; // 1 second per update
+        if (utilizationRatio > 0) {
+            energyModel.consumeEnergy(EnergyModel.State.PROCESSING, timeStep * utilizationRatio);
+        } else {
+            energyModel.consumeEnergy(EnergyModel.State.IDLE, timeStep);
+        }
     }
     
     /**
      * Check if this device has resources to process a given task
      */
     public boolean hasResourcesToProcess(Task task) {
-        return availableMips >= task.getSize();
+        boolean hasResources = availableMips >= task.getSize();
+        // Disabled verbose debug logging
+        // if (!hasResources) {
+        //     System.out.println("DEBUG: " + id + " cannot process task " + task.getId() + 
+        //                       ". Available MIPS: " + availableMips + ", Task size: " + task.getSize());
+        // }
+        return hasResources;
     }
     
     /**
@@ -194,20 +305,143 @@ public class FogDevice {
     }
     
     /**
-     * Complete all tasks in the scheduler for accurate metrics
-     * This is used at the end of simulation to ensure all tasks are counted
+     * Complete all remaining tasks (used at simulation end)
      */
     public void completeAllTasks() {
-        // Force completion of any remaining tasks in the scheduler
-        List<Task> remainingTasks = scheduler.getAllTasks();
-        for (Task task : remainingTasks) {
+        int completedCount = 0;
+        
+        // Get all tasks from scheduler
+        List<Task> allTasks = scheduler.getAllTasks();
+        
+        // Complete all tasks that are not yet completed
+        for (Task task : allTasks) {
             if (!task.isCompleted()) {
                 task.complete();
-                taskCompleted(task);
+                scheduler.addToCompletedTasks(task); // Add to completed tasks list
+                completedCount++;
             }
+        }
+        
+        if (completedCount > 0) {
+            System.out.println(id + ": Completed " + completedCount + " remaining tasks");
         }
     }
     
+    /**
+     * Process a task directly (used by offloading controller)
+     * @param task Task to process
+     * @return True if task was accepted and processed
+     */
+    public boolean processTask(Task task) {
+        // First receive the task
+        if (!receiveTask(task)) {
+            return false;
+        }
+        
+        // Update to process the task immediately
+        update();
+        
+        return true;
+    }
+    
+    /**
+     * Get the energy model for this device
+     */
+    public EnergyModel getEnergyModel() {
+        return energyModel;
+    }
+    
+    /**
+     * Set a custom energy model for this device
+     */
+    public void setEnergyModel(EnergyModel energyModel) {
+        this.energyModel = energyModel;
+    }
+    
+    /**
+     * Get the network model for this device
+     */
+    public WirelessNetworkModel getNetworkModel() {
+        return networkModel;
+    }
+    
+    /**
+     * Set a custom network model for this device
+     * @param protocol Wireless protocol to use
+     */
+    public void setNetworkModel(WirelessNetworkModel.Protocol protocol) {
+        this.networkModel = new WirelessNetworkModel(protocol);
+    }
+    
+    /**
+     * Get the security manager for this device
+     */
+    public SecurityManager getSecurityManager() {
+        return securityManager;
+    }
+    
+    /**
+     * Set security settings for this device
+     * @param authType Authentication type
+     * @param securityLevel Security level
+     */
+    public void setSecuritySettings(SecurityManager.AuthType authType, 
+                                  SecurityManager.SecurityLevel securityLevel) {
+        this.securityManager = new SecurityManager(authType, securityLevel);
+        this.securityManager.authenticateDevice(this.id);
+    }
+    
+    /**
+     * Enable or disable security features
+     */
+    public void setSecurityEnabled(boolean enabled) {
+        this.securityEnabled = enabled;
+    }
+    
+    /**
+     * Check if security is enabled
+     */
+    public boolean isSecurityEnabled() {
+        return securityEnabled;
+    }
+    
+    /**
+     * Get energy statistics for this device
+     */
+    public String getEnergyStatistics() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Energy statistics for device " + id + ":\n");
+        sb.append("  Total energy consumed: " + String.format("%.2f", energyModel.getTotalEnergyConsumed()) + " J\n");
+        
+        // If device has battery, show battery level
+        double batteryPercentage = energyModel.getBatteryPercentage();
+        if (batteryPercentage >= 0) {
+            sb.append("  Battery remaining: " + String.format("%.2f", batteryPercentage) + "%\n");
+        }
+        
+        // Calculate energy efficiency (tasks per joule)
+        int completedTasks = scheduler.getCompletedTasks().size();
+        double energyEfficiency = energyModel.getEnergyEfficiency(completedTasks);
+        sb.append("  Energy efficiency: " + String.format("%.4f", energyEfficiency) + " tasks/J\n");
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Get network statistics for this device
+     */
+    public String getNetworkStatistics() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Network statistics for device " + id + ":\n");
+        sb.append("  Protocol: " + networkModel.getProtocol() + "\n");
+        sb.append("  Max range: " + String.format("%.2f", networkModel.getBaseRange()) + " m\n");
+        
+        // Calculate effective bandwidth at different distances
+        sb.append("  Bandwidth at 10m: " + String.format("%.2f", networkModel.calculateBandwidth(10)) + " Kbps\n");
+        sb.append("  Bandwidth at 100m: " + String.format("%.2f", networkModel.calculateBandwidth(100)) + " Kbps\n");
+        
+        return sb.toString();
+    }
     
     // Getters and setters
     public String getId() {
@@ -222,8 +456,18 @@ public class FogDevice {
         return y;
     }
     
+    /**
+     * Get total MIPS capacity
+     */
     public int getTotalMips() {
         return totalMips;
+    }
+    
+    /**
+     * Get used MIPS (total - available)
+     */
+    public int getUsedMips() {
+        return totalMips - availableMips;
     }
     
     public int getAvailableMips() {

@@ -25,6 +25,8 @@ public class IoTDevice {
      * Generate a task and send it to the connected fog device
      */
     public void generateTask(Task task) {
+        // Set the source ID to this IoT device's ID
+        task.setSourceId(this.id);
         generatedTasks.add(task);
     }
     

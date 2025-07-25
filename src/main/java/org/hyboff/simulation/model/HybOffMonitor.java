@@ -101,6 +101,22 @@ public class HybOffMonitor {
     }
     
     /**
+     * Get the current CPU utilization
+     * @return CPU utilization as a ratio (0.0 to 1.0)
+     */
+    public double getCpuUtilization() {
+        return fogDevice.getUtilizationRatio();
+    }
+    
+    /**
+     * Update the monitor's internal state
+     */
+    public void update() {
+        // Currently just monitors local resources
+        monitorLocalResources();
+    }
+    
+    /**
      * Enum for load status categories
      */
     public enum LoadStatus {
