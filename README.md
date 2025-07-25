@@ -1,51 +1,80 @@
 # HybOff: A Hybrid Offloading Approach for IoT Task Offloading in Edge-Cloud Environments
 
 ## Project Overview
-This project is an implementation of the "HybOff: a Hybrid Offloading approach to improve load balancing in fog environments" paper (Journal of Cloud Computing, 2024). The implementation demonstrates a novel approach for IoT task offloading in edge-cloud environments, focusing on improving load balancing and resource utilization.
+This project implements the concepts from the paper "Task offloading for multi-server edge computing in industrial Internet with joint load balance and fuzzy security" (Jin et al., Scientific Reports, 2024). The implementation demonstrates a novel approach for IoT task offloading in edge-cloud environments, focusing on improving load balancing, resource utilization, and security integration.
 
 ## Key Features
-1. **Hybrid Offloading Algorithm**: Combines the benefits of both static and dynamic offloading approaches.
-2. **Cell-Based Architecture**: Groups adjacent fog nodes into cells for efficient resource management.
-3. **Master-Follower Structure**: Each cell has a master node that manages offloading decisions within the cell.
-4. **Reduced Communication Overhead**: Minimizes message exchanges between servers.
-5. **Improved Load Balancing**: Achieves better load balancing compared to traditional approaches.
+1. **Hybrid Offloading Algorithm**: Combines the benefits of both static and dynamic offloading approaches to optimize task distribution.
+2. **Multi-Server Edge Computing**: Supports offloading tasks to multiple fog/edge devices based on their current load and capabilities.
+3. **Load Balancing**: Implements sophisticated load balancing to prevent network congestion and improve resource utilization.
+4. **Security Integration**: Incorporates security levels and authentication mechanisms similar to the "fuzzy security" concept.
+5. **Energy Awareness**: Tracks and optimizes energy consumption across devices.
+6. **Partial Offloading**: Supports decisions about which tasks should be offloaded and to which edge servers.
 
 ## Components
-1. **Big Data System**: Simulates processing of large volumes of IoT data across edge-cloud layers.
-2. **IoT and Wireless Technologies**: Models different wireless communication technologies between IoT devices and edge/fog nodes.
-3. **Service Distribution**: Implements task offloading strategies across IoT devices, edge nodes, and cloud.
+1. **IoT Devices**: Simulates IoT devices that generate computation-intensive tasks.
+2. **Fog Devices**: Represents edge servers that can process offloaded tasks.
+3. **Wireless Network Model**: Simulates network transmission with configurable packet loss and latency.
+4. **Energy Model**: Tracks energy consumption of devices during task processing.
+5. **Security Manager**: Handles authentication and security level enforcement.
 
 ## Technologies Used
-- **iFogSim**: Simulation tool for fog computing environments
-- **Java**: Programming language
+- **Java**: Programming language for the entire simulation framework
 - **Maven**: Dependency management and build tool
 
 ## Implementation Details
-The project simulates a fog computing environment with multiple cells, each containing fog servers. The HybOff algorithm is implemented to:
-- Monitor workload on fog servers
-- Cluster servers into cells using K-means algorithm
-- Elect master nodes in each cell
-- Implement static offloading within cells
-- Allow dynamic offloading for urgent tasks
+The project simulates an edge computing environment with multiple fog devices (edge servers) and IoT devices. The HybOff algorithm implements:
+
+- Dynamic monitoring of resource utilization across fog devices
+- Task scheduling based on device capabilities and current load
+- Security-aware task offloading with authentication mechanisms
+- Energy-efficient task processing with energy consumption tracking
+- Wireless network simulation with configurable packet loss and latency
+- Three different offloading policies for comparison:
+  - Static Offloading (SoA): Fixed offloading decisions
+  - Dynamic Offloading (PoA): Decisions based on current system state
+  - Hybrid Offloading (HybOff): Combines static and dynamic approaches
 
 ## Performance Metrics
 The implementation measures:
-1. Resource utilization ratio of the fog system
-2. Load balancing among fog servers
-3. Overall system performance
-4. Offloading message overhead
-5. Service time for tasks
+
+1. **Task Completion Rate**: Percentage of tasks successfully completed
+2. **Resource Utilization**: How efficiently fog device resources are used
+3. **Load Balancing**: Distribution of tasks across available fog devices
+4. **Average Response Time**: Time from task creation to completion
+5. **Energy Consumption**: Total and per-device energy usage
+6. **Network Metrics**: Offloading rates and transmission statistics
+7. **Security Metrics**: Security level distribution and overhead
 
 ## Requirements
 - Java 8 or higher
 - Maven 3.6 or higher
 
 ## Usage
+
+### Clone the repository
 ```bash
-mvn clean install
-mvn exec:java -Dexec.mainClass="org.hyboff.simulation.HybOffSimulation"
+git clone https://github.com/yourusername/IoT-Edge-Cloud-Offloading.git
+cd IoT-Edge-Cloud-Offloading
 ```
 
+### Compile the project
+```bash
+mvn clean compile
+```
+
+### Run the simulation
+```bash
+mvn exec:java -Dexec.mainClass="org.hyboff.simulation.TestSimulation"
+```
+
+### Customizing the simulation
+You can modify the simulation parameters in the `TestSimulation.java` file:
+- Number of fog devices
+- Number of IoT devices
+- Task generation patterns
+- Security levels
+- Network parameters
+
 ## Paper Citation
-HybOff: a Hybrid Offloading approach to improve load balancing in fog environments. Journal of Cloud Computing (2024).
-# Iot-Edge-CLoud-Offloading
+Jin, X., Zhang, S., Ding, Y., & Wang, Z. (2024). Task offloading for multi-server edge computing in industrial Internet with joint load balance and fuzzy security. Scientific Reports, 14, 27813. https://doi.org/10.1038/s41598-024-79464-2
