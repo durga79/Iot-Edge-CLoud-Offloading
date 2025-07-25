@@ -53,19 +53,47 @@ The implementation measures:
 ## Usage
 
 ### Clone the repository
+
+#### Linux/macOS
 ```bash
 git clone https://github.com/yourusername/IoT-Edge-Cloud-Offloading.git
 cd IoT-Edge-Cloud-Offloading
 ```
 
+#### Windows
+```batch
+git clone https://github.com/yourusername/IoT-Edge-Cloud-Offloading.git
+cd IoT-Edge-Cloud-Offloading
+```
+
 ### Compile the project
+
+#### Linux/macOS
 ```bash
 mvn clean compile
 ```
 
+#### Windows
+```batch
+mvn clean compile
+```
+
 ### Run the simulation
+
+#### Linux/macOS
 ```bash
 mvn exec:java -Dexec.mainClass="org.hyboff.simulation.TestSimulation"
+```
+
+#### Windows
+```batch
+mvn exec:java -Dexec.mainClass="org.hyboff.simulation.TestSimulation"
+```
+
+### Alternative method for Windows (if exec:java doesn't work)
+```batch
+mvn clean package
+java -jar target/IoT-Edge-Cloud-Offloading-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 
 ### Customizing the simulation
