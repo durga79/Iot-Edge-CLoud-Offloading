@@ -258,35 +258,46 @@ public class FogDevice {
     
     /**
      * Check if this device has resources to process a given task
+     * Modified to be more lenient with resource checking
      */
     public boolean hasResourcesToProcess(Task task) {
-        boolean hasResources = availableMips >= task.getSize();
-        // Disabled verbose debug logging
-        // if (!hasResources) {
-        //     System.out.println("DEBUG: " + id + " cannot process task " + task.getId() + 
-        //                       ". Available MIPS: " + availableMips + ", Task size: " + task.getSize());
-        // }
+        // More lenient check - only require 50% of the task's MIPS to start processing
+        // This allows more tasks to be accepted while simulating partial resource allocation
+        boolean hasResources = availableMips >= (task.getSize() * 0.5);
+        
+        if (!hasResources) {
+            System.out.println("DEBUG: " + id + " cannot process task " + task.getId() + 
+                           ". Available MIPS: " + availableMips + ", Task size: " + task.getSize());
+        } else {
+            System.out.println("DEBUG: " + id + " accepting task " + task.getId() + 
+                           ". Available MIPS: " + availableMips + ", Task size: " + task.getSize());
+        }
+        
         return hasResources;
     }
     
     /**
      * Allocate resources for a task
+     * Modified to ensure proper resource allocation
      */
     public void allocateResource(int mips) {
-        this.availableMips -= mips;
-        if (availableMips < 0) {
-            availableMips = 0;
-        }
+        // Cap the allocation to what's available to prevent negative available MIPS
+        int actualAllocation = Math.min(mips, availableMips);
+        availableMips -= actualAllocation;
+        
+        System.out.println("RESOURCE: " + id + " allocated " + actualAllocation + " MIPS (requested: " + mips + "). Now available: " + availableMips);
     }
     
     /**
      * Release resources after task completion
+     * Modified to ensure proper resource release
      */
     public void releaseResource(int mips) {
-        this.availableMips += mips;
+        availableMips += mips;
         if (availableMips > totalMips) {
             availableMips = totalMips;
         }
+        System.out.println("RESOURCE: " + id + " released " + mips + " MIPS. Now available: " + availableMips);
     }
     
     /**

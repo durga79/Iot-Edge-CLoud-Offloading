@@ -10,7 +10,9 @@ import org.hyboff.simulation.model.IoTDevice;
 import org.hyboff.simulation.model.Task;
 import org.hyboff.simulation.offloading.HybridOffloadingPolicy;
 import org.hyboff.simulation.TestSimulation;
+import org.hyboff.simulation.util.ChartGenerator;
 import org.hyboff.simulation.util.Log;
+import org.hyboff.simulation.util.ResultsExporter;
 
 /**
  * This class simulates how iFogSim would be integrated with the HybOff implementation.
@@ -95,6 +97,9 @@ public class SimulatedIFogSim {
         private SimSensor source;
         private double dataSize;
         private double processingRequirement;
+        private int status = SimCloudlet.CREATED;
+        private double latency = 0.0;
+        private SimFogDevice processingDevice;
         
         public SimTuple(int id, double dataSize, double processingRequirement) {
             this.id = id;
@@ -108,30 +113,43 @@ public class SimulatedIFogSim {
         public void setSource(SimSensor source) { this.source = source; }
         public double getDataSize() { return dataSize; }
         public double getProcessingRequirement() { return processingRequirement; }
+        public int getStatus() { return status; }
+        public void setStatus(int status) { this.status = status; }
+        public double getLatency() { return latency; }
+        public void setLatency(double latency) { this.latency = latency; }
+        public SimFogDevice getProcessingDevice() { return processingDevice; }
+        public void setProcessingDevice(SimFogDevice device) { this.processingDevice = device; }
     }
     
     public static class SimCloudlet {
+        public static final int CREATED = 0;
         public static final int SUCCESS = 1;
-        public static final int FAILED = 0;
+        public static final int FAILED = 2;
         
         private int id;
         private double mips;
         private int ram;
-        private double storage;
-        private int status;
+        private double dataSize;
+        private int status = CREATED;
         
-        public SimCloudlet(int id, double mips, int ram, double storage) {
+        public SimCloudlet(int id, double mips, int ram, double dataSize) {
             this.id = id;
             this.mips = mips;
             this.ram = ram;
-            this.storage = storage;
+            this.dataSize = dataSize;
+            this.status = CREATED; // Not yet processed
+        }
+        
+        // Additional constructor with fewer parameters
+        public SimCloudlet(int id, double mips) {
+            this(id, mips, 10, 500); // Default RAM and dataSize values
         }
         
         // Getters and setters
         public int getId() { return id; }
         public double getMips() { return mips; }
         public int getRam() { return ram; }
-        public double getStorage() { return storage; }
+        public double getDataSize() { return dataSize; }
         public int getStatus() { return status; }
         public void setStatus(int status) { this.status = status; }
     }
@@ -211,23 +229,47 @@ public class SimulatedIFogSim {
     
     // Simulation method - processes a tuple on a fog device
     public static void processTuple(SimTuple tuple, SimFogDevice fogDevice) {
-        // Convert tuple to cloudlet (similar to how iFogSim works)
-        SimCloudlet cloudlet = new SimCloudlet(
-                tuple.getId(), 
-                tuple.getProcessingRequirement(), 
-                10, // RAM requirement 
-                tuple.getDataSize());
-        
-        // Use the module placement policy to select the best device
-        SimFogDevice selectedDevice = modulePlacement.selectDeviceForModule(cloudlet);
-        
-        // Process the cloudlet on the selected device
-        selectedDevice.processCloudlet(cloudlet);
+        // Check if the device has enough capacity
+        if (fogDevice.getMips() >= tuple.getProcessingRequirement()) {
+            // Create a cloudlet to represent the tuple processing task
+            SimCloudlet cloudlet = new SimCloudlet(tuple.getId(), tuple.getProcessingRequirement());
+            
+            // Process the task on the fog device
+            fogDevice.processCloudlet(cloudlet);
+            
+            // Update the tuple status and processing device
+            tuple.setStatus(cloudlet.getStatus());
+            tuple.setProcessingDevice(fogDevice);
+            
+        } else {
+            // If the device doesn't have enough capacity, try to offload
+            boolean offloaded = false;
+            
+            // In a real implementation, we'd use the hybrid offloading algorithm here
+            // For this simulation, we'll just try to find any device with enough capacity
+            for (SimFogDevice device : modulePlacement.fogDevices) {
+                if (device.getMips() >= tuple.getProcessingRequirement()) {
+                    SimCloudlet cloudlet = new SimCloudlet(tuple.getId(), tuple.getProcessingRequirement());
+                    device.processCloudlet(cloudlet);
+                    offloaded = true;
+                    
+                    // Update the tuple status and processing device
+                    tuple.setStatus(cloudlet.getStatus());
+                    tuple.setProcessingDevice(device);
+                    
+                    Log.printLine("iFogSim: Task " + tuple.getId() + " offloaded from " + 
+                            fogDevice.getName() + " to " + device.getName());
+                    break;
+                }
+            }
+            
+            if (!offloaded) {
+                Log.printLine("iFogSim: Failed to process task " + tuple.getId() + 
+                        ": no suitable device found");
+                tuple.setStatus(SimCloudlet.FAILED);
+            }
+        }
     }
-    
-    // Mapping between our model and the iFogSim model
-    private static Map<FogDevice, SimFogDevice> fogDeviceMap = new HashMap<>();
-    private static Map<IoTDevice, SimSensor> iotDeviceMap = new HashMap<>();
     
     /**
      * Converts our fog devices to simulated iFogSim fog devices
@@ -244,7 +286,6 @@ public class SimulatedIFogSim {
                     device.getStorage(),
                     device.getBandwidth());
             
-            fogDeviceMap.put(device, simDevice);
             simDevices.add(simDevice);
         }
         
@@ -260,14 +301,19 @@ public class SimulatedIFogSim {
         for (IoTDevice device : devices) {
             // Find the connected fog device
             FogDevice connectedFog = device.getConnectedFogDevice();
-            SimFogDevice simFog = fogDeviceMap.get(connectedFog);
+            SimFogDevice simFog = null;
+            for (SimFogDevice fogDevice : fogDevices) {
+                if (fogDevice.getId().equals(connectedFog.getId())) {
+                    simFog = fogDevice;
+                    break;
+                }
+            }
             
             SimSensor sensor = new SimSensor(
                     "iot-" + device.getId(),
                     device.getId(),  // This is already a String in your model
                     simFog);
             
-            iotDeviceMap.put(device, sensor);
             sensors.add(sensor);
         }
         
@@ -288,52 +334,137 @@ public class SimulatedIFogSim {
      * Run the iFogSim simulation
      */
     public static void runSimulation(List<FogDevice> fogDevices, List<IoTDevice> iotDevices) {
-        // Convert our model to iFogSim model
+        Log.printLine("\n============================================");
+        Log.printLine("Starting iFogSim simulation...");
+        Log.printLine("============================================\n");
+        
+        // Convert HybOff devices to iFogSim equivalents
         List<SimFogDevice> simFogDevices = convertFogDevices(fogDevices);
+        
+        // Create sensors (simulating IoT devices)
         List<SimSensor> simSensors = convertIoTDevices(iotDevices, simFogDevices);
         
         // Create the module placement (offloading policy)
         modulePlacement = new SimHybridOffloadingPolicy(simFogDevices);
         
-        // Simulate the IoT devices generating tasks
-        Log.printLine("\n========= iFogSim SIMULATION START =========");
-        Log.printLine("Using HybridOffloadingPolicy for task placement");
+        Log.printLine("iFogSim: Created " + simFogDevices.size() + " fog devices and " +
+                simSensors.size() + " sensors.");
         
-        // Generate some sample tasks from each IoT device
-        int tupleCount = 0;
-        for (IoTDevice device : iotDevices) {
-            SimSensor sensor = iotDeviceMap.get(device);
-            for (int i = 0; i < 5; i++) { // Generate 5 tuples per sensor
-                Task task = new Task(String.valueOf(tupleCount++), 100 + (int)(Math.random() * 400), 10, true);
-                SimTuple tuple = convertTask(task);
-                sensor.generateTuple(tuple);
+        // Generate some tuples (tasks) from sensors
+        int tupleCount = 100;
+        Log.printLine("iFogSim: Generating " + tupleCount + " tuples from sensors...");
+        
+        // Keep track of successful and failed tasks
+        int processedTasks = 0;
+        int failedTasks = 0;
+        
+        // Add latency tracking
+        double totalLatency = 0.0;
+        
+        // Track task distribution by device
+        Map<String, Integer> taskDistribution = new HashMap<>();
+        
+        for (int i = 0; i < tupleCount; i++) {
+            // Pick a random sensor
+            SimSensor sensor = simSensors.get(i % simSensors.size());
+            
+            // Create a tuple with random size and processing requirement
+            double dataSize = 500 + Math.random() * 1000;  // 500-1500 KB
+            double mips = 100 + Math.random() * 400;       // 100-500 MIPS
+            
+            SimTuple tuple = new SimTuple(i, dataSize, mips);
+            
+            // Capture start time for latency calculation
+            long startTime = System.currentTimeMillis();
+            sensor.generateTuple(tuple);
+            long endTime = System.currentTimeMillis();
+            double latency = (endTime - startTime);
+            tuple.setLatency(latency);
+            totalLatency += latency;
+            
+            // Check if tuple was processed
+            if (tuple.getStatus() == SimCloudlet.SUCCESS) {
+                processedTasks++;
+                
+                // Update task distribution
+                String deviceId = tuple.getProcessingDevice().getId();
+                taskDistribution.put(deviceId, taskDistribution.getOrDefault(deviceId, 0) + 1);
+            } else {
+                failedTasks++;
             }
         }
         
-        // Print simulation results
-        Log.printLine("\n========= iFogSim SIMULATION RESULTS =========");
-        double totalUtilization = 0;
-        double totalEnergy = 0;
-        int processedTasks = 0;
+        // Collect results
+        double totalUtilization = 0.0;
+        double totalEnergy = 0.0;
+        
+        // Store device utilization and energy for charts
+        Map<String, Double> deviceUtilization = new HashMap<>();
+        Map<String, Double> deviceEnergy = new HashMap<>();
+        
+        Log.printLine("\niFogSim: Simulation completed with " + processedTasks + 
+                " successful tasks and " + failedTasks + " failed tasks.");
+        Log.printLine("\nDevice Statistics:");
+        
+        // Convert simFogDevices to FogDevice for export
+        List<FogDevice> resultFogDevices = new ArrayList<>();
         
         for (SimFogDevice device : simFogDevices) {
             totalUtilization += device.getResourceUtilization();
             totalEnergy += device.getEnergyConsumption();
-            processedTasks += device.processedCloudlets.size();
             
-            Log.printLine("Fog Device: " + device.getName());
-            Log.printLine("  - Processed tasks: " + device.processedCloudlets.size());
+            // Store metrics for charts
+            deviceUtilization.put(device.getId(), device.getResourceUtilization() * 100);
+            deviceEnergy.put(device.getId(), device.getEnergyConsumption());
+            
+            // Create equivalent FogDevice for export
+            FogDevice resultDevice = new FogDevice(
+                device.getId(), 
+                (int)device.getMips(), // Cast to int as required by constructor
+                device.getRam(), 
+                (int)device.getStorage(), // Cast to int as required by constructor
+                (int)device.getBandwidth(), // Cast to int as required by constructor
+                0.0, 0.0);
+                
+            // We don't need to set the ID as it's already set in the constructor
+            // We can't directly set utilization or energy as there are no setter methods
+            // The values will be tracked in the maps instead
+            resultFogDevices.add(resultDevice);
+            
+            Log.printLine("\nDevice: " + device.getName() + " (" + device.getId() + ")");
+            Log.printLine("  - Tasks processed: " + device.processedCloudlets.size());
             Log.printLine("  - Resource utilization: " + String.format("%.2f%%", device.getResourceUtilization() * 100));
             Log.printLine("  - Energy consumption: " + String.format("%.2f units", device.getEnergyConsumption()));
         }
         
         double avgUtilization = totalUtilization / simFogDevices.size();
+        double avgLatency = processedTasks > 0 ? totalLatency / processedTasks : 0;
         
         Log.printLine("\nSummary:");
         Log.printLine("  - Total processed tasks: " + processedTasks);
         Log.printLine("  - Average resource utilization: " + String.format("%.2f%%", avgUtilization * 100));
         Log.printLine("  - Total energy consumption: " + String.format("%.2f units", totalEnergy));
+        Log.printLine("  - Average latency: " + String.format("%.2f ms", avgLatency));
         Log.printLine("\n============================================");
+        
+        // Export results to CSV
+        String resultsDir = ResultsExporter.exportResults(
+                resultFogDevices,
+                processedTasks,
+                avgUtilization,
+                totalEnergy,
+                avgLatency,
+                taskDistribution,
+                "iFogSim");
+        
+        // Generate charts
+        ChartGenerator.generateCharts(
+                resultsDir,
+                taskDistribution,
+                deviceUtilization,
+                deviceEnergy);
+        
+        Log.printLine("\nResults and charts saved to: " + resultsDir);
     }
     
     /**

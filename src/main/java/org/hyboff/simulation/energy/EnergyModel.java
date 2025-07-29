@@ -147,10 +147,11 @@ public class EnergyModel {
      * @return Energy efficiency in tasks per joule
      */
     public double getEnergyEfficiency(int completedTasks) {
-        if (totalEnergyConsumed <= 0) {
+        if (totalEnergyConsumed <= 0 || completedTasks <= 0) {
             return 0;
         }
-        return completedTasks / totalEnergyConsumed;
+        // Cast completedTasks to double to ensure floating-point division
+        return ((double)completedTasks) / totalEnergyConsumed;
     }
     
     /**

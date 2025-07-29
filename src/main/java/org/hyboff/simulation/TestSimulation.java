@@ -1,7 +1,9 @@
 package org.hyboff.simulation;
 
 import org.hyboff.simulation.model.*;
+import org.hyboff.simulation.util.ChartGenerator;
 import org.hyboff.simulation.util.Log;
+import org.hyboff.simulation.util.ResultsExporter;
 import org.hyboff.simulation.util.SimulationClock;
 import org.hyboff.simulation.network.WirelessNetworkModel;
 import org.hyboff.simulation.security.SecurityManager;
@@ -184,7 +186,7 @@ public class TestSimulation {
             }
         }
         
-        // Print final metrics
+        Log.printLine("\n*** Final Metrics for " + policyName + " ***\n");
         printFinalMetrics(fogDevices, policyName);
     }
     
@@ -217,7 +219,7 @@ public class TestSimulation {
     }
     
     private static void printFinalMetrics(List<FogDevice> fogDevices, String policyName) {
-        System.out.println("\n====== SIMULATION RESULTS ======");
+        Log.printLine("\n====== SIMULATION RESULTS: " + policyName + " ======");
         
         // Force completion of all tasks before calculating metrics
         for (FogDevice fog : fogDevices) {
@@ -290,7 +292,7 @@ public class TestSimulation {
         System.out.println("Total Energy Consumed: " + String.format("%.2f", totalEnergy) + " J");
         System.out.println("Average Energy per Device: " + String.format("%.2f", avgEnergyPerDevice) + " J");
         System.out.println("Energy per Task: " + String.format("%.2f", energyPerTask) + " J");
-        System.out.println("Average Energy Efficiency: " + String.format("%.4f", avgEnergyEfficiency) + " tasks/J");
+        System.out.println("Average Energy Efficiency: " + String.format("%.8f", avgEnergyEfficiency) + " tasks/J");
         
         // Network metrics
         System.out.println("\n====== NETWORK METRICS ======");
@@ -342,6 +344,37 @@ public class TestSimulation {
             System.out.println("\n====== SECURITY METRICS ======");
             System.out.println("Security Enabled: No");
         }
+        
+        // Create maps for task distribution, device utilization, and energy consumption for charts
+        Map<String, Integer> taskDistribution = new HashMap<>();
+        Map<String, Double> deviceUtilization = new HashMap<>();
+        Map<String, Double> deviceEnergy = new HashMap<>();
+        
+        for (FogDevice fog : fogDevices) {
+            int completedTaskCount = fog.getScheduler().getCompletedTasks().size();
+            taskDistribution.put(fog.getId(), completedTaskCount);
+            deviceUtilization.put(fog.getId(), fog.getUtilizationRatio() * 100);
+            deviceEnergy.put(fog.getId(), fog.getEnergyModel().getTotalEnergyConsumed());
+        }
+        
+        // Export results to CSV
+        String resultsDir = ResultsExporter.exportResults(
+                fogDevices,
+                completedTasks,
+                avgResponseTime,
+                totalEnergy,
+                avgResponseTime,
+                taskDistribution,
+                policyName);
+        
+        // Generate charts
+        ChartGenerator.generateCharts(
+                resultsDir,
+                taskDistribution,
+                deviceUtilization,
+                deviceEnergy);
+        
+        Log.printLine("Results and charts saved to: " + resultsDir);
     }
     
     private static void resetDevices(List<FogDevice> fogDevices) {

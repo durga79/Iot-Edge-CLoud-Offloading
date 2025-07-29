@@ -1,10 +1,16 @@
 @echo off
 echo ===================================================
-echo IoT Edge-Cloud Offloading Simulation - iFogSim Mode
+echo IoT Edge-Cloud Offloading Simulation - iFogSim Mode ONLY
 echo ===================================================
 echo.
-echo Running simulation with simulated iFogSim integration
+echo Running simulation with simulated iFogSim integration ONLY
 echo.
+
+:: Create simulation_results directory if it doesn't exist
+if not exist "simulation_results" (
+    mkdir simulation_results
+    echo Created simulation_results directory
+)
 
 :: Check if Java is installed
 echo Checking Java installation...
@@ -42,7 +48,7 @@ echo.
 
 :: Try running with Maven exec plugin
 echo Running iFogSim simulation using Maven exec plugin...
-call mvn exec:java -Dexec.mainClass="org.hyboff.simulation.RunSimulation" -Dexec.args="--ifogsim"
+call mvn exec:java -Dexec.args="--ifogsim"
 
 if %errorlevel% neq 0 (
     echo WARNING: Maven exec failed. Will attempt to run using the JAR file.
@@ -89,4 +95,13 @@ echo.
 echo ===================================================
 echo iFogSim simulation completed!
 echo ===================================================
+echo.
+echo Results have been saved to the simulation_results directory
+echo CSV files and visualization charts have been generated
+echo.
+
+:: Show results directory
+echo Opening results folder...
+start "" "%CD%\simulation_results"
+echo.
 pause
